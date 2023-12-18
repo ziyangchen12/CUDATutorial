@@ -21,7 +21,7 @@ __device__ float WarpShuffle(float sum) {
 
 template <int blockSize>
 __global__ void reduce_warp_level(float *d_in,float *d_out, unsigned int n){
-    float sum = 0;//当前线程的私有寄存器，即每个线程都会拥有一个sum寄存器
+    float sum = 0;//当前线程的私有寄存器，即每个线程都会拥有一个sum寄存器   像这种单个float就可以看成thread当中的一个寄存器
 
     unsigned int tid = threadIdx.x;
     unsigned int gtid = blockIdx.x * blockSize + threadIdx.x;
@@ -45,7 +45,8 @@ __global__ void reduce_warp_level(float *d_in,float *d_out, unsigned int n){
     //接下来，再使用第一个warp(laneId=0-31)对每个warp的reduce sum结果求和
     //首先，把warpsums存入前blockDim.x / WarpSize个线程的sum寄存器中
     //接着，继续warpshuffle
-    sum = (tid < blockSize / WarpSize) ? WarpSums[laneId] : 0;
+    sum = (tid < blockSize / WarpSize) ? WarpSums[laneId] : 0;//原来的WarpSums是属于shared mem的，但是使用这个wrapshuffle函数的话需要把他送入寄存器当中
+// 以wrap为单位进行计算得到了blockSize / WarpSize   个sum，然后再对这些sum进行相加得到block内的计算结果，然后再是block的sum相加得到最终的结果
     // Final reduce using first warp
     if (warpId == 0) {
         sum = WarpShuffle<blockSize/WarpSize>(sum); 
