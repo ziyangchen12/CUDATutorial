@@ -8,7 +8,10 @@ __global__ void histgram(int *hist_data, int *bin_data)
     /*error*/
     // bin_data[hist_data[gtid]]++;
     /*right*/
-    atomicAdd(&bin_data[hist_data[gtid]], 1);
+    atomicAdd(&bin_data[hist_data[gtid]], 1);//性能延迟不好的原因，会造成bank conflict，因为val在这个数组histgram中有很多，每一个单线程计算全局内存中的若干个值val，那么就会有多个线程访问相同的val，
+//一个疑问点是多个相同的val在smem中是只存储一个吗？还是存放在不同的位置呢？
+//答案：这里是对于bindata这个存储位置的bank conflict吧，一个wrap中的线程有可能都会访问同一个index的bin_data[index]导致了bank conflict？
+
 }
 
 bool CheckResult(int *out, int* groudtruth, int N){
