@@ -67,14 +67,14 @@ int filter(int *dst, int *src, int n) {
 __device__ int atomicAggInc(int *ctr) {
   unsigned int active = __activemask();
   int leader = 0;
-  int change = __popc(active);//warp mask中为1的数量
+  int change = __popc(active);//warp mask中为1的数量,大于0的线程数量？？大于其他的呢比如100？
   int lane_mask_lt;
-  asm("mov.u32 %0, %%lanemask_lt;" : "=r"(lane_mask_lt));
-  unsigned int rank = __popc(active & lane_mask_lt);//比当前线程id小且值为1的mask之和
+  asm("mov.u32 %0, %%lanemask_lt;" : "=r"(lane_mask_lt));//每个线程在wrap中的index（次序）是多少呢，tid=2，index = 2；
+  unsigned int rank = __popc(active & lane_mask_lt);//比当前线程id小且值为1的mask之和，这个才是所有大于0的线程中的当前线程的位置offset
   int warp_res;
   if(rank == 0)//leader thread of every warp
     warp_res = atomicAdd(ctr, change);//compute global offset of warp
-  warp_res = __shfl_sync(active, warp_res, leader);//broadcast to every thread
+  warp_res = __shfl_sync(active, warp_res, leader);//broadcast to every thread，把leader的res广播到所有的warp线程中去，有什么用吗？
   return warp_res + rank;
 }
 
