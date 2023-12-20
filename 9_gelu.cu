@@ -2,7 +2,7 @@
 #include <cuda.h>
 #include <cuda_fp16.h>
 #include "cuda_runtime.h"
-
+//注释的这些内容需要在ampre 级别的gpu才可以进行运算，google colab只有t4级别的gpu可以进行运算
 template <typename T, int Size>
 struct alignas(sizeof(T) * Size) AlignedVector {
   T val[Size];
@@ -72,7 +72,7 @@ __global__ void FP16GeluCUDAKernel(const __half* x,
                                                  int n) {
   int offset =
       static_cast<int>(threadIdx.x + blockIdx.x * blockDim.x) * VecSize;
-  int stride = static_cast<int>(blockDim.x * gridDim.x) * VecSize;
+  int stride = static_cast<int>(blockDim.x * gridDim.x) * VecSize;//数据量不能被所有线程整除的时候，也就是一部分数据只能被部分数据处理
   GeluFunctor<half> gelu_fwd;
   __half y_reg[VecSize];
   for (; offset < n; offset += stride) {
@@ -81,7 +81,7 @@ __global__ void FP16GeluCUDAKernel(const __half* x,
     // ArrT* out_arr = reinterpret_cast<const ArrT*>(y + offset);
     const __half* in = reinterpret_cast<const __half*>(in_arr);
     // __half* out = reinterpret_cast<const __half*>(out_arr);
-
+//两次指针强转的原因：1、是为了进行内存对齐吧，加快内存存取速度 2、转变回来的原因是如果原来是ArrT类型的，每次加一就是加上ArrT的长度了，如果VecSize不是1，那么in[0]就不是一个数字了，而是一个数组？
     if (VecSize == 1){
         y_reg[0] = gelu_fwd(in[0]);
     } else {
