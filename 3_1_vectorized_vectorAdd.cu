@@ -3,7 +3,7 @@
 #include <cuda_runtime.h>
 
 #define ARRAY_SIZE 100000000   //Array size has to exceed L2 size to avoid L2 cache residence
-#define MEMORY_OFFSET 10000000
+#define MEMORY_OFFSET 10000000 //400M分成10分得到40M，这就是比上面少一个0，是一个偏移不如说是步长
 #define BENCH_ITER 10
 #define THREADS_NUM 256
 
@@ -77,7 +77,7 @@ int main(){
 	int BlockNums = MEMORY_OFFSET / 256;
     //warm up to occupy L2 cache
 	printf("warm up start\n");
-	mem_bw<<<BlockNums / 4, THREADS_NUM>>>(A_g, B_g, C_g);
+	mem_bw<<<BlockNums / 4, THREADS_NUM>>>(A_g, B_g, C_g);//像占据l2cache的数据，然后就是这部分l2数据在执行计算的时候，其他iter的数据还在显存里面进行
 	printf("warm up end\n");
     // time start using cudaEvent
 	cudaEvent_t start, stop;
