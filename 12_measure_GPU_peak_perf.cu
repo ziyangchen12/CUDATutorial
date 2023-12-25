@@ -16,6 +16,7 @@ __global__ void FP32FLOPS(int* start, int* stop, float* x, float* y, float* resu
     // A1: we use >2(3or4) fma instruction to hide for loop comparsion and addition instruction overhead
     // Q2: why use 4 dependant fma instruction to get GPU peak performance, can we use 4 independant ones?
     // A2: yes, we can use 2/3/4 independant ones
+//就是单独定义变量 res1 = d1*d2+res1这种，但是注意    result1[gtid] = res1;一定要写进去这个，否则nvcc编译器会优化，峰值就不是8.08 TFLOPS了
     for (int i = 0; i < LOOP_TIMES; i++) {
         //asm volatile ("{\n\t""fma.rn.f32 %0, %1, %2 , %0; \n\t"
         //                     "fma.rn.f32 %0, %1, %2 , %0; \n\t"
@@ -68,10 +69,11 @@ int main() {
     cudaGetDeviceProperties(&props, 0);
     
     int ThreadsPerSM = props.maxThreadsPerMultiProcessor;
-    float FLOPS = (LOOP_TIMES * 4 * 2 * 1024) / (static_cast<float>(stopClock[0] - startClock[0]));
+    float FLOPS = (LOOP_TIMES * 4 * 2 * 1024) / (static_cast<float>(stopClock[0] - startClock[0]));//每个cycle做的指令计算量，循环次数*四次操作*加法乘法*启动了1024个thread
+//也是一个sm上的
     printf( "  GPU Max Clock rate: %0.2f GHz\n" , props.clockRate * 1e-6f);
     printf(" SM counts is %d", props.multiProcessorCount);
-    printf("actual NVIDIA T4 GPU peak FLOPS is %f (TFLOPS) \n", FLOPS * props.clockRate * 1e-9 * props.multiProcessorCount);
+    printf("actual NVIDIA T4 GPU peak FLOPS is %f (TFLOPS) \n", FLOPS * props.clockRate * 1e-9 * props.multiProcessorCount);//转换成s需要乘以时钟频率然后是sm的数量，这个是测试gpu的峰值
     free(x);
     free(y);
     free(startClock);
