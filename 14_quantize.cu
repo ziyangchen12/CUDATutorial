@@ -177,7 +177,7 @@ __global__ void ReduceMaxMinPerTensor(const T* input_ptr, const int nums, T* max
   // dyn shared memory
   extern __shared__ unsigned char shared_max_min_memory[];
   T* shared_max = reinterpret_cast<T*>(shared_max_min_memory);
-  T* shared_min = shared_max + blockDim.x;
+  T* shared_min = shared_max + blockDim.x;//在后续的计算中，最大值和最小值可以同时被更新，而不会相互影响,在CUDA编程中，每个线程块（block）都有自己的共享内存（shared memory）,所以这才是加上Blockdim而不是grid里面的thread数量？
   int total_thread_num = blockDim.x * gridDim.x;
   // follow the reduce v4
   int tid = threadIdx.x;
@@ -186,9 +186,9 @@ __global__ void ReduceMaxMinPerTensor(const T* input_ptr, const int nums, T* max
   shared_min[tid] = FLT_MAX;
 
   for (int i = gid; i < nums; i += total_thread_num) {
-      shared_max[tid] = max(shared_max[tid], input_ptr[i]);
+      shared_max[tid] = max(shared_max[tid], input_ptr[i]);//这部分不能算是reduce的部分，是一个线程处理多个数据了，数据量大于thread数量
       shared_min[tid] = min(shared_min[tid], input_ptr[i]);
-      //if(i <= 3){
+      //if(i <= 3){//这个操作的必要性，调试可以将kernal的block数量和thread数量变成1，可以变成串行操作，可以方便调试
         //printf("shared max = %f\n", shared_max[tid]);
         //printf("shared_min = %f\n", shared_min[tid]);
       //}
@@ -197,14 +197,14 @@ __global__ void ReduceMaxMinPerTensor(const T* input_ptr, const int nums, T* max
   
   for (int s = blockDim.x / 2; s > 0; s >>= 1) {
     if (tid < s && gid < nums) {
-      shared_max[tid] = max(shared_max[tid], shared_max[tid + s]);
-      shared_min[tid] = min(shared_min[tid], shared_min[tid + s]);
+      shared_max[tid] = max(shared_max[tid], shared_max[tid + s]);//reduce操作，v4，最后的结果存在tid=0的位置上面，得到是每个block的最值，每个block都有自己的shared mem
+      shared_min[tid] = min(shared_min[tid], shared_min[tid + s]);//如果再对block进行reduce的话就可以得到，不过这里使用了原子操作
     }
     __syncthreads();
   }
 
   if (tid == 0) {
-      atomicMax(max_ptr, shared_max[0]);
+      atomicMax(max_ptr, shared_max[0]);//但是atomicMax并不支持fp32 cuda的生态中，这里是自己编写 的，每个block的比较变成了串行操作
       atomicMin(min_ptr, shared_min[0]);
       //printf("max = %f\n", *max_ptr);
       //printf("min = %f\n", *min_ptr);
@@ -230,7 +230,7 @@ __global__ void ReduceMaxMinPerChannel(const T* input_ptr, const int nums,
     int index = (HW * cur_channel) + tid;
     int end = HW * (cur_channel + 1);
 
-    while (index < end && index < nums) {
+    while (index < end && index < nums) {//这个是为了收缩channel内的数据，防止分配的thread数量少于channel里面的数据的数量，类似上面那个per tensor的方法
       shared_max[tid] = max(shared_max[tid], input_ptr[index]);
       shared_min[tid] = min(shared_min[tid], input_ptr[index]);
       index += blockDim.x;
@@ -253,7 +253,7 @@ __global__ void ReduceMaxMinPerChannel(const T* input_ptr, const int nums,
         printf("min = %f\n", min_ptr[0]);
       }
     }
-    cur_channel += gridDim.x;
+    cur_channel += gridDim.x;//这里的操作就可以使得每个block对应到channel上面了
   }
 }
 
@@ -267,8 +267,8 @@ __global__ void GetScaleAndZPSymmetric(const T* max_ptr, const T* min_ptr,
                                            T* scale, T* zero_point) {
   int tid = threadIdx.x;
   int gid = blockDim.x * blockIdx.x + tid;
-  while (gid < nums) {
-    T weight_max = max(fabs(max_ptr[gid]), fabs(min_ptr[gid]));
+  while (gid < nums) {//这边的一个操作是gid始终为0，如果按照上面的方式进行求解的话，那么最后的scale数值是在全局gid=0的位置上的，那么只有一个线程在这里做串行的操作，
+    T weight_max = max(fabs(max_ptr[gid]), fabs(min_ptr[gid]));//所以为什么这样写呢？规范化，调试？这个gridDim也不是1啊  在哪里有“上”部分22：35说的，scale的求解是两个标量的求解，不是向量不需要进行并行操作
     //if (gid==0) printf("weight_max_gpu is %f, fabs(max_ptr[gid]) is %f, fabs(min_ptr[gid]) is %f\n",weight_max,fabs(max_ptr[gid]),fabs(min_ptr[gid]));
     T denominator = static_cast<T>(pow(2.0, quantization_bit - 1)) - 1;
     scale[gid] = weight_max / denominator;
