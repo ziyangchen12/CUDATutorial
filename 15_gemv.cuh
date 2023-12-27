@@ -57,13 +57,13 @@ __device__ __forceinline__ T blockReduce(T val){
     int lane_id = tid % 32;
     int warp_nums = (blockDim.x + 31) / 32;
     static __shared__ float warpres[64];
-    val = warpReduce<ReductionOp, T>(val);
+    val = warpReduce<ReductionOp, T>(val);//这个算是reduce block？按照wrap的层级进行的reduce
     if (lane_id == 0){
         warpres[warp_id] = val;
     }
     __syncthreads();
     float warp_val = tid < warp_nums ? warpres[tid] : 0;
-    return warpReduce<ReductionOp, T>(warp_val);
+    return warpReduce<ReductionOp, T>(warp_val);//那这个算是在单个wrap内的？不是，将每个wrap的计算结果再次进行一次计算得到的
 }
 
 // 一个blk计算一个元素
