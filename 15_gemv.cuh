@@ -42,11 +42,12 @@ template<>
 struct SumOp<half> {
   __device__ __forceinline__ half operator()(const half& a, const half& b) const { return __hadd(a, b); }
 };
-
+//在CC3.0以上，支持了shuffle指令，允许thread直接读其他thread的寄存器值，
+//只要两个thread在 同一个warp中，这种比通过shared Memory进行thread间的通讯效果更好，latency更低，同时也不消耗额外的内存资源来执行数据交换。
 template<template<typename> class ReductionOp, typename T>
 __device__ __forceinline__ T warpReduce(T val){
     for(int mask = 16; mask > 0; mask >>= 1){
-        val = ReductionOp<T>()(val, __shfl_xor_sync(0xffffffff, val, mask));
+        val = ReductionOp<T>()(val, __shfl_xor_sync(0xffffffff, val, mask));//从当前的线程id与laneMak异或运算的值作为线程号的，把这个线程号的var值取出来
     }
     return val;
 }
